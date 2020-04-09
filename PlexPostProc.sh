@@ -50,8 +50,9 @@ INWORKFILEPATH="$WORKDIR/$ORIGFILE"
 OUTWORKFILEPATH="$(mktemp $WORKDIR/ffmpeg.XXXX.mkv)"
 
 LOGDIR="/var/log/plexmedia"
-LOGFILE=post-process-script$(date +"%d-%H%M%S").log
+LOGFILE=post-process-script-$(date +"%d-%H%M%S").log
 LOGFILEPATH="$LOGDIR/$LOGFILE"
+touch $LOGFILE # Create the log file
 
 #******************************************************************************
 
@@ -72,28 +73,30 @@ if [ ! -z "$1" ]; then
    fi
    # The above if selection statement checks if the file exists before proceeding. 
 
-   TEMPFILENAME="$(mktemp).mkv"  # Temporary File Name for transcoding
-
-   LOGFILE="$TMPFOLDER/plexpp$(date +"%Y%m%d-%H%M%S").log" # Create a unique log file.
-   touch $LOGFILE # Create the log file
-
    # Uncomment if you want to adjust the bandwidth for this thread
    #MYPID=$$	# Process ID for current script
    # Adjust niceness of CPU priority for the current process
    #renice 19 $MYPID
+   
+   # ********************************************************
+   # Move source file to work directory
+   # ********************************************************
+   
+   mv -f "$ORIGFILEPATH" "$INWORKFILEPATH" # Move source file to work directory
+   check_errs $? "Failed to move source to workdirectory file: $INWORKFILEPATH"
 
    # ********************************************************
    # Starting Transcoding
    # ********************************************************
 
-   echo "$(date +"%Y%m%d-%H%M%S"): Starting transcode of $FILENAME to $TEMPFILENAME" | tee -a $LOGFILE
+   echo "$(date +"%Y%m%d-%H%M%S"): Starting transcode of $ORIGFILEPATH to $OUTWORKFILEPATH" | tee -a $LOGFILEPATH
    if [[ $ENCODER == "handbrake" ]]; then
-     echo "You have selected HandBrake" | tee -a $LOGFILE
-     HandBrakeCLI -i "$FILENAME" -f mkv --aencoder copy -e qsv_h264 --x264-preset veryfast --x264-profile auto -q 16 --maxHeight $RES --decomb bob -o "$TEMPFILENAME"
-     check_errs $? "Failed to convert using Handbrake."
+#     echo "You have selected HandBrake" | tee -a $LOGFILE
+#     HandBrakeCLI -i "$FILENAME" -f mkv --aencoder copy -e qsv_h264 --x264-preset veryfast --x264-profile auto -q 16 --maxHeight $RES --decomb bob -o "$TEMPFILENAME"
+#     check_errs $? "Failed to convert using Handbrake."
    elif [[ $ENCODER == "ffmpeg" ]]; then
-     echo "You have selected FFMPEG" | tee -a $LOGFILE
-     ffmpeg -i "$FILENAME" -s hd$RES -c:v libx264 -preset veryfast -vf yadif -c:a copy "$TEMPFILENAME"
+     echo "You have selected FFMPEG" | tee -a $LOGFILEPATH
+     ffmpeg -i "$INWORKFILEPATH" -c:v libx264 -preset veryfast -c:a copy "$OUTWORKFILEPATH"
      check_errs $? "Failed to convert using FFMPEG."
    else
      echo "Oops, invalid ENCODER string.  Using Default [FFMpeg]." | tee -a $LOGFILE
@@ -105,27 +108,16 @@ if [ ! -z "$1" ]; then
    # Encode Done. Performing Cleanup
    # ********************************************************"
 
-   echo "$(date +"%Y%m%d-%H%M%S"): Finished transcode of $FILENAME to $TEMPFILENAME" | tee -a $LOGFILE
+   echo "$(date +"%Y%m%d-%H%M%S"): Finished transcode of $ORIGFILEPATH to $OUTWORKFILEPATH" | tee -a $LOGFILEPATH
 
-   rm -f "$FILENAME" # Delete original in .grab folder
-   check_errs $? "Failed to remove original file: $FILENAME"
+   mv -f "$OUTWORKFILEPATH" "${ORIGFILEPATH%.ts}.mP4" # Move completed tempfile to .grab folder/filename
+   check_errs $? "Failed to move converted file: $OUTWORKFILEPATH"
 
-   mv -f "$TEMPFILENAME" "${FILENAME%.ts}.mkv" # Move completed tempfile to .grab folder/filename
-   check_errs $? "Failed to move converted file: $TEMPFILENAME"
+   rm -f "$OUTWORKFILEPATH" # Delete source from working folder
+   check_errs $? "Failed to remove working source file: $OUTWORKFILEPATH"
 
    rm -f "$LOCKFILE" # Delete the lockfile after completing
    check_errs $? "Failed to remove lockfile."
-
-   # [WORKAROUND] Wait for any other post-processing scripts to complete before exiting.
-   while [ true ] ; do
-     if ls "$TMPFOLDER/"*".ppplock" 1> /dev/null 2>&1; then
-       echo "$(date +"%Y%m%d-%H%M%S"): Looks like there is another scripting running.  Waiting." | tee -a $LOGFILE
-       sleep 5
-     else
-       echo "$(date +"%Y%m%d-%H%M%S"): It looks like all scripts are done running, exiting." | tee -a $LOGFILE
-       break
-     fi
-   done
 
    echo "$(date +"%Y%m%d-%H%M%S"): Encode done.  Exiting." | tee -a $LOGFILE
 
