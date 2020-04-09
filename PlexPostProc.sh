@@ -49,6 +49,7 @@ WORKDIR="/opt/plexmedia/dvr/work"
 INWORKFILEPATH="$WORKDIR/$ORIGFILE"
 OUTWORKFILEPATH="$(mktemp $WORKDIR/ffmpeg.XXXX.mkv)"
 
+DAYS=1
 LOGDIR="/var/log/plexmedia"
 LOGFILE=post-process-script-$(date +"%d-%H%M%S").log
 LOGFILEPATH="$LOGDIR/$LOGFILE"
@@ -110,22 +111,19 @@ if [ ! -z "$1" ]; then
 
    echo "$(date +"%Y%m%d-%H%M%S"): Finished transcode of $ORIGFILEPATH to $OUTWORKFILEPATH" | tee -a $LOGFILEPATH
 
-   mv -f "$OUTWORKFILEPATH" "${ORIGFILEPATH%.ts}.mP4" # Move completed tempfile to .grab folder/filename
+   mv -f "$OUTWORKFILEPATH" "${ORIGFILEPATH%.ts}.mp4" # Move completed tempfile to .grab folder/filename
    check_errs $? "Failed to move converted file: $OUTWORKFILEPATH"
 
    rm -f "$OUTWORKFILEPATH" # Delete source from working folder
    check_errs $? "Failed to remove working source file: $OUTWORKFILEPATH"
 
-   rm -f "$LOCKFILE" # Delete the lockfile after completing
-   check_errs $? "Failed to remove lockfile."
+   find "$LOGDIR* -mtime $DAYS -delete"
 
-   echo "$(date +"%Y%m%d-%H%M%S"): Encode done.  Exiting." | tee -a $LOGFILE
+   echo "$(date +"%Y%m%d-%H%M%S"): Encode done.  Exiting." | tee -a $LOGFILEPATH
 
 else
-   echo "********************************************************" | tee -a $LOGFILE
-   echo "PlexPostProc by nebhead" | tee -a $LOGFILE
-   echo "Usage: $0 FileName" | tee -a $LOGFILE
-   echo "********************************************************" | tee -a $LOGFILE
+   echo "********************************************************" | tee -a $LOGFILEPATH
+   echo "PlexPostProc by nebhead" | tee -a $LOGFILEPATH
+   echo "Usage: $0 FileName" | tee -a $LOGFILEPATH
+   echo "********************************************************" | tee -a $LOGFILEPATH
 fi
-
-rm -f "$TMPFOLDER/"*".ppplock"  # Make sure all lock files are removed, just in case there was an error somewhere in the script
