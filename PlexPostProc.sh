@@ -4,48 +4,55 @@
 #******************************************************************************
 #
 #            Plex DVR Post Processing Script
-#
+#   
+# Author: nebhead
 #******************************************************************************
 #******************************************************************************
 #
-#  Version: 2.0
+#  Version: 2.1
 #
 #  Pre-requisites:
-#     ffmpeg or handbrakecli
+#     ffmpeg
 #
 #  Usage:
 #     'PlexPostProc.sh %1'
 #
 #  Description:
-#      My script is currently pretty simple.  Here's the general flow:
 #
-#      1. Creates a temporary directory in the /tmp directory for
+#      1. Creates a temporary directory, WORKDIR, for
 #      the show it is about to transcode.
 #
-#      2. Uses the selected encoder to transcode the original, very
-#      large MPEG2 format file to a smaller, more manageable H.264 mkv file
+#      2. Copies the original file into WORKDIR so it won't be removed by
+#      Plex if another script instance finishes before this one.
+#
+#      3. Uses the selected encoder to transcode the original, very
+#      large MPEG2 format file to a smaller, more manageable H.264 mp4 file
 #      (which can be streamed to various devices more easily).
 #
-#      3. Copies the file back to the original .grab folder for final processing
+#      4. Copies the file back to the original .grab folder for final move by Plex
+#      to a library.
 #
 #  Log:
-#     Logs will be generated for each encode with the format:
-#         plexppYYYYMMDD-HHMMSS.logging
-#     Note: Logs are not deleted, so some cleanup of the temp directory may be
-#       required, or a server reboot should clear this folder.
+#     Logs will be generated in LOGDIR for each encode with the format of LOGFILE
+#    
+#     Note: DAYS old logs from prior runs are deleted by the current run. This
+#     should be a cron job, but let's keep it simple.
 #
 #******************************************************************************
 
-TMPFOLDER="/tmp"
-ENCODER="ffmpeg"  # Encoder to use:
-                  # "ffmpeg" for FFMPEG [DEFAULT]
-                  # "handbrake" for HandBrake
-RES="720"         # Resolution to convert to:
-                  # "720" = 720 Vertical Resolution
-                  # "1080" = 1080 Vertical Resolution
+# Source (original) file information
+ORIGDIR="dirname $1"
+ORIGFILE="basename $1"
+ORIGFILEPATH="$1"
 
-#******************************************************************************
-#  Do not edit below this line
+WORKDIR="/opt/plexmedia/dvr/work"
+INWORKFILEPATH="$WORKDIR/$ORIGFILE"
+OUTWORKFILEPATH="$(mktemp $WORKDIR/ffmpeg.XXXX.mkv)"
+
+LOGDIR="/var/log/plexmedia"
+LOGFILE=post-process-script$(date +"%d-%H%M%S").log
+LOGFILEPATH="$LOGDIR/$LOGFILE"
+
 #******************************************************************************
 
 check_errs()
@@ -64,14 +71,8 @@ if [ ! -z "$1" ]; then
       fatal "$1 does not exist"
    fi
    # The above if selection statement checks if the file exists before proceeding. 
-   
-   FILENAME=$1 	# %FILE% - Filename of original file
 
    TEMPFILENAME="$(mktemp).mkv"  # Temporary File Name for transcoding
-
-   LOCKFILE="$(mktemp).ppplock"  # [WORKAROUND] Temporary File for blocking simultaneous scripts from ending early
-   touch $LOCKFILE # Create the lock file
-   check_errs $? "Failed to create temporary lockfile: $LOCKFILE"
 
    LOGFILE="$TMPFOLDER/plexpp$(date +"%Y%m%d-%H%M%S").log" # Create a unique log file.
    touch $LOGFILE # Create the log file
